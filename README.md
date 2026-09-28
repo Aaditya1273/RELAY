@@ -9,6 +9,8 @@ RELAY answers that question for the whole team. It listens in the conversations 
 turns promises, customer issues and decisions into a shared ledger with sources, reminds
 the team every morning, and drafts follow-ups that go out only after a teammate approves them.
 
+![RELAY on Plow: recall with source, resolve with evidence](docs/relay-plow-chat.png)
+
 ## The problem
 
 Small teams run on chat. A co-founder promises an investor an update in one thread, a
