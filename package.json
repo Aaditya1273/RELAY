@@ -1,0 +1,13 @@
+{
+  "name": "relay-agent",
+  "version": "0.1.0",
+  "description": "RELAY — The First Hire Who Never Forgets. Shared commitment memory for OpenClaw teams.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "demo": "sh scripts/demo.sh"
+  }
+}

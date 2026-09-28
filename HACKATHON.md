@@ -1,0 +1,81 @@
+# RELAY — AI Worth Using × OpenClaw 2.0 Hackathon
+
+**Project:** RELAY
+**One-liner:** The AI Chief of Staff that remembers every commitment your team makes.
+**Tagline:** The First Hire Who Never Forgets.
+**License:** MIT (RELAY-authored material; see THIRD_PARTY_NOTICES.md)
+**Runtime:** OpenClaw 2026.8.1+ · Node 18+ · no other dependencies
+
+## What it is
+
+Conversation-native operational memory for 2–10 person teams. RELAY captures promises,
+customer issues and decisions from the team's chats into one shared ledger with sources,
+answers "what's open / what did we promise X", posts a morning brief of overdue and due
+items, and drafts follow-ups that are sent only after a teammate approves.
+
+## Why it needs OpenClaw 2.0
+
+- Several people operate one agent (multi-user sessions); RELAY is useless for one person
+  alone — context loss needs two or more.
+- Automations run the daily brief; the message tool sends approved follow-ups.
+- Skills + workspace files are the whole product: no fork, no extra service.
+
+## 60-second demo
+
+| | |
+| --- | --- |
+| 0–10s | User A (Slack): "I'll send Anu the investor update tonight." |
+| 10–20s | User B (WhatsApp group): "Acme says export is broken again." |
+| 20–35s | User C (third chat): "What are we on the hook for?" |
+| 35–48s | RELAY lists both with owners, due labels and the exact source messages; A says "I sent Anu the update" and it drops off |
+| 48–60s | "Draft a follow-up to Acme" → draft A-1 → "approve A-1" → sent once via the configured channel, receipt shown (or an honest "not sent: no channel configured") |
+
+Proves: real work · multiplayer · persistent memory · cross-context recall · action · safety.
+Full script and expected output: DEMO.md. Offline rehearsal: `npm run demo`.
+
+## Evidence we can show today
+
+- `npm test` → 17 passing tests (extraction incl. negatives, deadlines, dedupe, aliases,
+  resolution, overdue, provenance, injection, secret redaction, approval gate, concurrent writers, E2E CLI scenario).
+- `npm run demo` → the demo scenario end to end on the real engine.
+
+Not claimed: users, installs, token usage, success rates, testimonials, certifications.
+
+## Agent Index publishing checklist
+
+From <https://aiworthusing.com/agent-index/publish> and the Plow base README
+(<https://github.com/plow-pbc/plow-openclaw-agent>), as read on 2026-09-28.
+Prize eligibility there: **MIT licensed, reporting usage, and verified** (verification via their Discord).
+
+Path A — Plow base image (recommended; usage reporting is built in):
+
+1. Install the `plow-agents` CLI: <https://github.com/plow-pbc/plow-agents>
+2. `plow-agents login` and `plow-agents lines` (pick a line; note its uid)
+3. Pick a base: <https://gallery.ecr.aws/e1h7x4a2/plow-cloud-agents> → `base-<sha>@sha256:<digest>`
+4. Build the variant from this repo root:
+   `plow-agents image build -f plow/Dockerfile --build-arg BASE_REF=public.ecr.aws/e1h7x4a2/plow-cloud-agents:base-<sha>@sha256:<digest> ghcr.io/<you>/relay:v1 .`
+   (If `image build` does not accept `-f/--build-arg`, `docker build` with the same args, then push.)
+5. Run locally first: `plow-agents deploy --local --line <line>`; text the line "hello", then run the demo script.
+6. The Dockerfile sets `AGENT_ID=relay`; the base image registers the listing and reports usage every five minutes when `AGENT_ID` is set. Change the slug if `relay` is taken.
+7. `plow-agents image push ghcr.io/<you>/relay:v1` and `plow-agents profile --show`
+8. Post uid, slug and the pushed image reference in the AI Worth Using Discord to get verified and 1-click deploy enabled.
+9. Updates: `plow-agents image push ghcr.io/<you>/relay:v2 --promote relay`
+
+Path B — existing OpenClaw install: add `agent_index_client.py`
+(<https://github.com/plow-pbc/agent-index-client>) on a five-minute schedule, check with
+`--dry-run`, then `--register --agent relay --name RELAY --blurb '…'`. That client's
+out-of-the-box readers are Hermes, Claude Code and Codex; for OpenClaw you would supply a
+usage function. **Not done in this repo.**
+
+Pre-submission checks:
+- [ ] `npm test` green
+- [ ] LICENSE present; THIRD_PARTY_NOTICES.md reviewed
+- [ ] no secrets: `git grep -nE "sk-|ghp_|xox[abprs]-|AKIA|PRIVATE KEY"` only matches test fixtures/docs
+- [ ] live demo recorded on a real gateway (not the offline rehearsal)
+- [ ] listing blurb matches what RELAY actually does
+
+## Pitch notes by track (only what is true)
+
+- **Multiplayer:** the product is a shared ledger across people and channels; one person alone gets little value.
+- **Plow:** runs on the Plow base image; phone-line groups and email threads become RELAY inputs. Latch is used only if the owner connects it; RELAY does not ship Mac automations.
+- **SDR / recruiting / investor relations:** the same ledger tracks leads, candidates and investor promises mentioned in any chat. RELAY is not an outreach tool.

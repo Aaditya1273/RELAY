@@ -1,0 +1,12 @@
+# runtime state — never commit team memory
+relay-data/
+memory/
+*.lock
+*.tmp
+node_modules/
+.env
+.env.*
+**/*.pem
+**/*.key
+plow-credentials
+.DS_Store
