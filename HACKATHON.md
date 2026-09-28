@@ -43,6 +43,15 @@ Full script and expected output: DEMO.md. Offline rehearsal: `npm run demo`.
 
 Not claimed: users, installs, token usage, success rates, testimonials, certifications.
 
+## Published
+
+| | |
+| --- | --- |
+| Agent Index | <https://aiworthusing.com/agent-index/relay> (agent id `relay`) |
+| Repository | <https://github.com/Aaditya1273/RELAY> (MIT) |
+| Image | `ghcr.io/aaditya1273/relay@sha256:a221370e977ba49da2cb00dced21995007c124dae8630e73ef3c356c0eb3d524` (public) |
+| Plow cloud | deployed with `plow-agents deploy <image@digest> --line ln_p2` |
+
 ## Agent Index publishing checklist
 
 From <https://aiworthusing.com/agent-index/publish> and the Plow base README
