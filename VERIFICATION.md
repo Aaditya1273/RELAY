@@ -69,7 +69,7 @@ The same scenario, sent with `openclaw agent` inside the container (Plow's model
 
 Found on Plow and fixed: the container runs in UTC (`compose.yml` now passes `RELAY_TZ`); a
 rebuilt container got a new hostname and had to wait 5 minutes for the gateway lease
-(`compose.yml` now pins `hostname:`); the agent suggested a follow-up would resolve the issue
+(`compose.yml` now pins `hostname:`; after the fix a recreate was ready in 18 s); the agent suggested a follow-up would resolve the issue
 (relay-followup now forbids that).
 
 ## Bugs found live and fixed
@@ -89,8 +89,9 @@ rebuilt container got a new hostname and had to wait 5 minutes for the gateway l
   Real sender identity (`OPENCLAW_CHANNEL_CONTEXT`) and channel delivery are therefore not yet
   observed end to end.
 - **Real outbound send after approval.** It needs a channel that reaches the target.
-- **Texting the Plow line from a phone.** The agent is connected to the line, but the tests
-  above used `openclaw agent` inside the container, not real SMS/iMessage.
+- **Texting the Plow line from a phone.** The agent is connected to the line, but a real text
+  from India to the US line (+1) failed on the carrier side (international SMS blocked), so
+  no phone message reached it. The tests above used `openclaw agent` inside the container.
 - **Heartbeat nudges.** The scratch is loaded, but delivery skips until an owner route is set.
 - **Quality with bigger models.** `gemini-3.7-flash` and `gemini-3-flash-preview` hit the
   free-tier daily quota during testing, so the final run used `gemini-3.5-flash-lite`.
