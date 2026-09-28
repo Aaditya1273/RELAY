@@ -19,6 +19,9 @@ conversations you cannot see. Never answer from chat memory.
 | What is overdue? | `relay list --overdue` |
 | Due today? | `relay list --due-today` |
 | What are we waiting on from customers? | `relay list --type issue` |
+| Who owes us something? / What are we waiting on from others? | `relay list --waiting-on` |
+| What do we owe people? | `relay list --we-owe` |
+| Anything contradictory / unclear? | `relay list --conflicts` and `relay list --status tentative` |
 | Which commitments have no owner? | `relay list --unowned` |
 | What did the team decide about pricing? | `relay list --type decision --status all --text "pricing"` |
 | What changed since yesterday? | `relay changes --since yesterday` |
@@ -32,6 +35,9 @@ The asker's name is the message sender. "We" means the whole team.
 - Lead with the count, then one line per item: who → whom, what, due, status, id.
 - Add the source line ("said by <speaker> in <recorded channel>, <time>" — only what the ledger recorded) for each item or
   when asked. Quote evidence exactly; do not paraphrase it into something stronger.
+- Inbound items read "(they owe us)": say who owes the team what, not the other way round.
+- Items with a ⚠ conflict line: show both versions and who said each; never pick one.
+- Evidence marked `[external]` came from outside the team — say so when you quote it.
 - If nothing matches, say so plainly. Do not pad.
 - Offer at most one next step (assign an owner, draft a follow-up).
 - If a query mentions a person the ledger does not know, say that rather than guessing.

@@ -31,15 +31,16 @@ test('negative fixtures produce no commitments/issues/decisions', () => {
   }
 });
 
-test('G: ambiguous (hedged) promises are low confidence and capture refuses them', () => {
+test('G: ambiguous (hedged) promises are low confidence and staged as tentative, not open', () => {
   const led = ledger();
   for (const f of F.low_confidence) {
     const c = first(f.text, 'Meera');
     assert.equal(c.confidence, 'low', f.text);
     const r = R.capture(led, { ...c });
-    assert.equal(r.result, 'needs_clarification');
+    assert.equal(r.result, 'needs_confirmation');
   }
-  assert.equal(led.read().items.length, 0);
+  assert.equal(R.query(led.read(), {}).length, 0);
+  assert.equal(R.query(led.read(), { status: 'tentative' }).length, 2);
 });
 
 test('queries are recognised as queries, not new commitments', () => {
@@ -132,6 +133,7 @@ test('L: prompt injection is flagged and never becomes state; secrets are redact
 
 test('M: outbound actions are approval-gated and idempotent', () => {
   const led = ledger();
+  R.upsertPerson(led, { name: 'Acme' }); // a registered contact, so a single approval is enough (see F5)
   const draft = { kind: 'send_message', target: 'Acme', channel: 'whatsapp', body: 'Hi Acme — we are on the export bug.', by: 'Meera' };
   const p = R.propose(led, draft);
   assert.equal(p.action.status, 'pending_approval');
@@ -147,6 +149,7 @@ test('M: outbound actions are approval-gated and idempotent', () => {
 
 test('M: RELAY_APPROVERS restricts who can approve', () => {
   const led = ledger();
+  R.upsertPerson(led, { name: 'Anu' });
   const p = R.propose(led, { kind: 'send_message', target: 'Anu', body: 'update' });
   process.env.RELAY_APPROVERS = 'Aaditya';
   try {

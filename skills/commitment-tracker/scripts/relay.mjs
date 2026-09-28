@@ -71,16 +71,32 @@ const DECISION_RE = /\b(we decided|decided to|decision:|we're going with|we are 
 const RESOLVE_RE = /^(?:ok,? |okay,? |update:? )?(?:(?:i|we)(?:'ve| have)? (?:just |finally )?(sent|shipped|fixed|delivered|finished|closed|resolved|merged|paid|signed|submitted|emailed|completed)\b|(done|sent|fixed|shipped|delivered)\b[.! ]*$|.* (is|was|has been|got) (fixed|resolved|sent|delivered|shipped|closed)\b)/i;
 const NAME_AFTER_VERB = /\b(?:send|email|ping|call|tell|update|pay|introduce|message|text|remind|invoice|reply to|follow up with|get back to|share with)\s+([A-Z][a-zA-Z]+(?: [A-Z][a-zA-Z]+)?)/;
 const NAME_AFTER_PREP = /\b(?:to|for|with)\s+([A-Z][a-zA-Z]+(?: [A-Z][a-zA-Z]+)?)\b/;
+// "Anu said she'll intro us…", "Rahul will send the term sheet…": someone outside the team owes us.
+const INBOUND_RE = /^([A-Z][a-zA-Z]+(?: [A-Z][a-zA-Z]+)?)\s+(?:(?:said|says|promised|confirmed|told (?:us|me))\s+(?:that\s+)?(?:she|he|they)(?:'ll| will|'d| would| is going to| are going to)|will|'ll|is going to|promised to|agreed to)\s+(.*)$/;
+const NOT_A_NAME = new Set('the this that these those it there here what who which when where why how he she they everything nothing something someone somebody everyone everybody nobody we i you our my his her their its your'.split(' '));
+const HEDGE_TAIL_RE = /\b(at some point|some ?day|eventually|sometime)\b/gi;
 const ORG_SAYS = /^([A-Z][A-Za-z0-9&.]+(?: [A-Z][A-Za-z0-9&.]+)?)\s+(?:says|said|reports|reported|reports that|mentioned|complained)\b[ ,:]*(?:that )?(.*)$/;
 
 const sentences = (text) => String(text).split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+const stripHedge = (s) => s.replace(HEDGE_TAIL_RE, '').replace(/\s+/g, ' ').trim();
+// RELAY_TEAM="Aaditya,Priya,Meera" lists teammates; anyone else is outside the team.
+export const teamList = () => (process.env.RELAY_TEAM || '').split(',').map(norm).filter(Boolean);
+const isTeammate = (name) => !!name && teamList().includes(norm(name));
+// Evidence from outside the team (forwarded mail, customers, bots) is 'external'. An explicit
+// 'team' claim cannot override RELAY_TEAM: only membership makes a speaker trusted.
+export function trustOf(speaker, explicit) {
+  if (explicit === 'external') return 'external';
+  const team = teamList();
+  if (team.length && !(speaker && team.includes(norm(speaker)))) return 'external';
+  return 'team';
+}
 const stripDeadline = (s) => s.replace(DEADLINE_RE, '').replace(/\s+(by|before|on)\s*$/i, '').replace(/[.!?]+$/, '').replace(/\s+/g, ' ').trim();
 
 export function extract(text, ctx = {}) {
   const out = [];
   const speaker = ctx.speaker || null;
   for (const s of sentences(text)) {
-    const base = { evidence: s, source_channel: ctx.channel || null, source_session: ctx.session || null, source_reference: ctx.ref || null, speaker };
+    const base = { evidence: s, source_channel: ctx.channel || null, source_session: ctx.session || null, source_reference: ctx.ref || null, speaker, ...(ctx.external ? { trust: 'external' } : {}) };
     if (INJECTION_RE.test(s)) { out.push({ kind: 'ignored', reason: 'untrusted_instruction', ...base }); continue; }
     if (QUERY_RE.test(s)) { out.push({ kind: 'query', ...base }); continue; }
     if (NEG_RE.test(s)) continue;
@@ -107,11 +123,24 @@ export function extract(text, ctx = {}) {
       const rest = m[2] || '';
       const owes = /\bowe$/i.test(m[0].replace(m[2], '').trim());
       const counterparty = ((owes && rest.match(/^([A-Z][a-zA-Z]+)/)) || rest.match(NAME_AFTER_VERB) || rest.match(NAME_AFTER_PREP) || [])[1] || null;
-      const action = stripDeadline(owes && counterparty ? `give ${counterparty} ${rest.slice(counterparty.length).trim()}` : rest);
+      const action = stripHedge(stripDeadline(owes && counterparty ? `give ${counterparty} ${rest.slice(counterparty.length).trim()}` : rest));
       if (!action || tokens(action).size === 0) continue;
       let confidence = deadline_text || counterparty ? 'high' : 'medium';
       if (HEDGE_RE.test(s) || /\?\s*$/.test(s)) confidence = 'low';
-      out.push({ kind: 'commitment', type: 'commitment', owner: we ? 'team' : speaker, counterparty, action, deadline_text, confidence, ...base });
+      out.push({ kind: 'commitment', type: 'commitment', direction: 'outbound', owner: we ? 'team' : speaker, counterparty, action, deadline_text, confidence, ...base });
+      continue;
+    }
+    if ((m = s.match(INBOUND_RE)) && !NOT_A_NAME.has(norm(m[1])) && !/\?\s*$/.test(s)) {
+      const action = stripHedge(stripDeadline(m[2]));
+      if (!action || tokens(action).size === 0) continue;
+      let confidence = deadline_text ? 'high' : 'medium';
+      if (HEDGE_RE.test(s)) confidence = 'low';
+      if (isTeammate(m[1])) { // "Priya will fix it" — an assignment inside the team
+        const counterparty = (action.match(NAME_AFTER_VERB) || action.match(NAME_AFTER_PREP) || [])[1] || null;
+        out.push({ kind: 'commitment', type: 'commitment', direction: 'outbound', owner: m[1], counterparty, action, deadline_text, confidence, ...base });
+      } else {
+        out.push({ kind: 'commitment', type: 'commitment', direction: 'inbound', owner: m[1], counterparty: 'team', action, deadline_text, confidence, ...base });
+      }
       continue;
     }
     if ((m = s.match(REQUEST_RE))) {
@@ -192,51 +221,171 @@ const partiesOf = (it) => [it.owner, it.counterparty, it.stakeholder, it.request
 const subjectOf = (it) => it.action || it.title || it.decision || '';
 
 // ---------- mutations ----------
+const unset = (v) => !v || norm(v) === 'unassigned';
+const dirOf = (it) => (it.type === 'commitment' ? it.direction || 'outbound' : null);
+// The party a promise is about: who we owe (outbound) or who owes us (inbound).
+const partyOf = (it) => (dirOf(it) === 'inbound' ? it.owner : it.counterparty || it.stakeholder);
+const openConflicts = (it) => (it.conflicts || []).filter((c) => c.status === 'open');
+const nextId = (db, p) => `${p}-${(db.seq[p] = (db.seq[p] || 0) + 1)}`;
+
 export function capture(led, input) {
   const type = input.type;
   if (!PREFIX[type]) throw new UserError(`type must be one of: ${Object.keys(PREFIX).join(', ')}`);
   if (!input.evidence) throw new UserError('evidence (the original message text) is required for provenance');
-  if (input.confidence === 'low') {
-    return { result: 'needs_clarification', message: 'Confidence is low. Ask the team to confirm who/what/when before recording this.' };
-  }
   const subject = clean(input.action || input.title || input.decision);
   if (!subject) throw new UserError(type === 'commitment' ? 'action is required' : type === 'issue' ? 'title is required' : 'decision is required');
+  const low = input.confidence === 'low';
+  let direction = type === 'commitment' ? (input.direction === 'inbound' ? 'inbound' : 'outbound') : null;
+  if (direction === 'inbound' && isTeammate(input.owner)) direction = 'outbound';
   return led.tx((db) => {
     const at = led.now().toISOString();
-    const ev = { text: clean(input.evidence), by: clean(input.speaker || input.by), channel: clean(input.source_channel), session: clean(input.source_session), ref: clean(input.source_reference), at, kind: 'capture' };
+    const by = clean(input.speaker || input.by);
+    const ev = { text: clean(input.evidence), by, channel: clean(input.source_channel), session: clean(input.source_session), ref: clean(input.source_reference), at, kind: 'capture', trust: trustOf(by, input.trust) };
+    const live = (it) => it.type === type && ['open', 'tentative'].includes(it.status) && dirOf(it) === direction;
     // Idempotent re-ingest: same message already recorded.
     if (ev.ref) {
       const same = db.items.find((it) => it.type === type && it.evidence.some((e) => e.ref === ev.ref && e.channel === ev.channel && e.kind === 'capture') && similarity(subjectOf(it), subject) >= 0.5);
       if (same) return { result: 'duplicate', item: same };
     }
-    const party = norm(input.counterparty || input.stakeholder || '');
-    const dup = db.items.find((it) => it.type === type && it.status === 'open'
-      && (!party || !norm(it.counterparty || it.stakeholder || '') || namesFor(db, party).has(norm(it.counterparty || it.stakeholder)))
+    const party = norm(direction === 'inbound' ? input.owner : input.counterparty || input.stakeholder || '');
+    const dup = db.items.find((it) => live(it)
+      && (!party || !norm(partyOf(it) || '') || namesFor(db, party).has(norm(partyOf(it))))
       && similarity(subjectOf(it), subject) >= 0.6);
     const deadline = input.deadline ? parseDeadline(input.deadline, led.now()) : parseDeadline(input.deadline_text, led.now());
-    if (dup) {
-      dup.evidence.push({ ...ev, kind: 'update' });
-      for (const k of ['owner', 'counterparty', 'stakeholder', 'next_action', 'priority', 'description']) if (input[k] && !dup[k]) dup[k] = clean(input[k]);
-      if (deadline) { dup.deadline = deadline; dup.deadline_text = clean(input.deadline_text || input.deadline); }
-      dup.updated_at = at;
-      led.log(`updated ${dup.id}: ${subjectOf(dup)} (repeat mention by ${ev.by || 'unknown'})`);
-      return { result: 'updated', item: dup };
-    }
+    const deadlineText = clean(input.deadline_text || input.deadline);
+    if (dup) return merge(led, db, dup, { input, ev, at, low, deadline, deadlineText });
     const id = `${PREFIX[type]}-${++db.seq[PREFIX[type]]}`;
     const item = {
-      id, type, status: 'open', confidence: input.confidence || 'medium',
+      id, type, status: low ? 'tentative' : 'open', confidence: input.confidence || 'medium',
       owner: clean(input.owner) || (type === 'decision' ? null : 'unassigned'),
       created_at: at, updated_at: at, resolved_at: null,
       source_channel: ev.channel, source_session: ev.session, source_reference: ev.ref,
-      evidence: [ev],
+      evidence: [ev], conflicts: [],
     };
-    if (type === 'commitment') Object.assign(item, { action: subject, counterparty: clean(input.counterparty), requested_by: clean(input.requested_by), deadline, deadline_text: clean(input.deadline_text || input.deadline), next_action: clean(input.next_action) || subject });
+    if (type === 'commitment') {
+      Object.assign(item, { direction, action: subject, counterparty: direction === 'inbound' ? 'team' : clean(input.counterparty), requested_by: clean(input.requested_by), deadline, deadline_text: deadlineText, deadline_by: deadline ? by : null });
+      item.next_action = clean(input.next_action) || (direction === 'inbound' ? `nudge ${item.owner}: ${subject}` : subject);
+    }
     if (type === 'issue') Object.assign(item, { title: subject, description: clean(input.description), stakeholder: clean(input.stakeholder), priority: clean(input.priority) || 'normal', next_action: clean(input.next_action) || 'investigate and reply to ' + (input.stakeholder || 'reporter') });
     if (type === 'decision') Object.assign(item, { decision: subject, context: clean(input.context), participants: (input.participants || []).map(clean), date: at.slice(0, 10) });
+    item.owner_by = unset(item.owner) ? null : by;
     db.items.push(item);
     for (const n of partiesOf(item)) touchPerson(db, n, at);
-    led.log(`captured ${id} [${type}] ${describe(item)} — "${clip(ev.text, 160)}" (${ev.by || 'unknown'} via ${ev.channel || 'unknown channel'})`);
+    led.log(`${low ? 'staged (tentative)' : 'captured'} ${id} [${type}] ${describe(item)} — "${clip(ev.text, 160)}" (${ev.by || 'unknown'} via ${ev.channel || 'unknown channel'}${ev.trust === 'external' ? ', external' : ''})`);
+    if (low) return { result: 'needs_confirmation', item, message: `Staged ${id} as tentative (hedged or unclear). Ask the team to confirm who/what/when, then run \`confirm ${id}\` or \`reject ${id}\`.` };
     return { result: 'created', item };
+  });
+}
+
+// A new mention of an item we already track. Fills gaps, promotes tentative items, and
+// records a conflict (instead of silently overwriting) when a teammate states a different
+// deadline or owner. The owner restating their own deadline is a reschedule, not a conflict.
+function merge(led, db, dup, { input, ev, at, low, deadline, deadlineText }) {
+  const evU = { ...ev, kind: 'update' };
+  dup.updated_at = at;
+  dup.conflicts ||= [];
+  if (low) {
+    dup.evidence.push(evU);
+    led.log(`updated ${dup.id}: hedged mention by ${ev.by || 'unknown'}`);
+    return dup.status === 'tentative'
+      ? { result: 'needs_confirmation', item: dup, message: `${dup.id} is still tentative. Ask the team to confirm it.` }
+      : { result: 'updated', item: dup };
+  }
+  let promoted = false;
+  if (dup.status === 'tentative') {
+    dup.status = 'open'; dup.confidence = input.confidence || 'medium'; promoted = true;
+    evU.kind = 'confirm'; evU.note = 'confirmed by a confident restatement';
+  }
+  const found = [];
+  const addConflict = (field, current, current_text, current_by, proposed, proposed_text) => {
+    const c = { id: nextId(db, 'X'), field, current, current_text, current_by, proposed, proposed_text, by: ev.by, evidence: ev.text, at, status: 'open' };
+    dup.conflicts.push(c); found.push(c);
+  };
+  const byOwner = ev.by && !unset(dup.owner) && namesFor(db, dup.owner).has(norm(ev.by));
+  if (input.owner && !unset(input.owner)) {
+    if (unset(dup.owner)) { dup.owner = clean(input.owner); dup.owner_by = ev.by; }
+    else if (!['team'].includes(norm(input.owner)) && norm(dup.owner) !== 'team' && !namesFor(db, dup.owner).has(norm(input.owner))) {
+      addConflict('owner', dup.owner, dup.owner, dup.owner_by || dup.evidence[0].by, clean(input.owner), clean(input.owner));
+    }
+  }
+  if (deadline) {
+    if (!dup.deadline || sameLocalDay(dup.deadline, deadline) || byOwner) {
+      if (dup.deadline && !sameLocalDay(dup.deadline, deadline)) evU.note = `rescheduled from "${dup.deadline_text || fmtDate(dup.deadline)}" to "${deadlineText}" by the owner`;
+      if (!dup.deadline || !sameLocalDay(dup.deadline, deadline)) { dup.deadline = deadline; dup.deadline_text = deadlineText; dup.deadline_by = ev.by; }
+    } else {
+      addConflict('deadline', dup.deadline, dup.deadline_text || fmtDate(dup.deadline), dup.deadline_by || dup.evidence[0].by, deadline, deadlineText);
+    }
+  }
+  for (const k of ['counterparty', 'stakeholder', 'next_action', 'priority', 'description']) if (input[k] && unset(dup[k]) && !(k === 'counterparty' && dirOf(dup) === 'inbound')) dup[k] = clean(input[k]);
+  if (found.length) evU.note = [evU.note, `conflict ${found.map((c) => c.id).join(', ')}`].filter(Boolean).join('; ');
+  dup.evidence.push(evU);
+  if (found.length) {
+    const c = found[0];
+    led.log(`conflict ${c.id} on ${dup.id} ${c.field}: "${c.current_text}" (${c.current_by || 'unknown'}) vs "${c.proposed_text}" (${c.by || 'unknown'})`);
+    return { result: 'conflict', item: dup, conflict: c, conflicts: found, message: `Conflicting ${found.map((x) => x.field).join(' and ')} for ${dup.id}. Kept the current value; ask the team which is right, then run \`settle ${dup.id} --field ${c.field} --value <answer>\`.` };
+  }
+  led.log(`${promoted ? 'confirmed' : 'updated'} ${dup.id}: ${subjectOf(dup)} (${evU.note || 'repeat mention'} by ${ev.by || 'unknown'})`);
+  return { result: promoted ? 'confirmed' : 'updated', item: dup };
+}
+
+// Settle an open conflict: the team picked a value for a field.
+export function settle(led, id, { field, value, by } = {}) {
+  if (!['deadline', 'owner'].includes(field)) throw new UserError('field must be deadline or owner');
+  if (!value) throw new UserError('value is required');
+  return led.tx((db) => {
+    const it = db.items.find((x) => x.id === id);
+    if (!it) throw new UserError(`no item ${id}`);
+    const open = openConflicts(it).filter((c) => c.field === field);
+    if (!open.length) throw new UserError(`${id} has no open conflict on ${field}`);
+    const at = led.now().toISOString();
+    applyField(it, field, value, by, led.now());
+    for (const c of open) Object.assign(c, { status: 'settled', settled_value: clean(value), settled_by: clean(by), settled_at: at });
+    it.updated_at = at;
+    it.evidence.push({ text: `settled ${field}: ${value}`, by: clean(by), at, kind: 'update', trust: trustOf(by) });
+    led.log(`settled ${open.map((c) => c.id).join(', ')} on ${id}: ${field} = ${value} (${by || 'unknown'})`);
+    return { result: 'settled', item: it };
+  });
+}
+
+function applyField(it, k, v, by, now) {
+  if (k === 'deadline') {
+    const d = parseDeadline(v, now);
+    if (v && !d) throw new UserError(`could not resolve "${v}" to a date; use a weekday, "tomorrow" or YYYY-MM-DD`);
+    if (!(d && it.deadline && sameLocalDay(d, it.deadline))) it.deadline = d;
+    it.deadline_text = clean(v); it.deadline_by = clean(by);
+  } else {
+    it[k] = clean(v);
+    if (k === 'owner') it.owner_by = clean(by);
+  }
+}
+
+// Tentative items (low confidence) wait here until a teammate confirms or rejects them.
+export function confirm(led, id, { by, patch = {}, evidence } = {}) {
+  return led.tx((db) => {
+    const it = db.items.find((x) => x.id === id);
+    if (!it) throw new UserError(`no item ${id}`);
+    if (it.status !== 'tentative') throw new UserError(`${id} is ${it.status}, not tentative`);
+    for (const [k, v] of Object.entries(patch)) {
+      if (!PATCHABLE.includes(k) || k === 'status') throw new UserError(`cannot set field ${k}`);
+      applyField(it, k, v, by, led.now());
+    }
+    const at = led.now().toISOString();
+    Object.assign(it, { status: 'open', confidence: 'medium', updated_at: at });
+    it.evidence.push({ text: clean(evidence) || `confirmed by ${by || 'unknown'}`, by: clean(by), at, kind: 'confirm', trust: trustOf(by) });
+    led.log(`confirmed ${id}: ${subjectOf(it)} (${by || 'unknown'})`);
+    return { result: 'confirmed', item: it };
+  });
+}
+export function reject(led, id, { by, evidence } = {}) {
+  return led.tx((db) => {
+    const it = db.items.find((x) => x.id === id);
+    if (!it) throw new UserError(`no item ${id}`);
+    if (it.status !== 'tentative') throw new UserError(`${id} is ${it.status}, not tentative`);
+    const at = led.now().toISOString();
+    Object.assign(it, { status: 'rejected', updated_at: at, resolved_at: at });
+    it.evidence.push({ text: clean(evidence) || `rejected by ${by || 'unknown'}`, by: clean(by), at, kind: 'resolution', trust: trustOf(by) });
+    led.log(`rejected ${id}: ${subjectOf(it)} (${by || 'unknown'})`);
+    return { result: 'rejected', item: it };
   });
 }
 
@@ -250,14 +399,15 @@ export function resolve(led, id, { evidence, by, ref, channel, status = 'resolve
     it.status = status;
     it.resolved_at = at;
     it.updated_at = at;
-    it.evidence.push({ text: clean(evidence), by: clean(by), channel: clean(channel), ref: clean(ref), at, kind: 'resolution' });
+    it.evidence.push({ text: clean(evidence), by: clean(by), channel: clean(channel), ref: clean(ref), at, kind: 'resolution', trust: trustOf(by) });
     led.log(`${status} ${id}: ${subjectOf(it)} — "${clip(clean(evidence), 160)}" (${by || 'unknown'})`);
     return { result: status, item: it };
   });
 }
 
+const PATCHABLE = ['owner', 'counterparty', 'stakeholder', 'next_action', 'priority', 'description', 'deadline', 'status', 'action', 'title', 'context'];
 export function update(led, id, patch, by) {
-  const allowed = ['owner', 'counterparty', 'stakeholder', 'next_action', 'priority', 'description', 'deadline', 'status', 'action', 'title', 'context'];
+  const allowed = PATCHABLE;
   return led.tx((db) => {
     const it = db.items.find((x) => x.id === id);
     if (!it) throw new UserError(`no item ${id}`);
@@ -267,12 +417,13 @@ export function update(led, id, patch, by) {
       if (!allowed.includes(k)) throw new UserError(`cannot update field ${k}`);
       if (k === 'status' && v === 'resolved') throw new UserError('use `resolve` so the resolution carries evidence');
       if (k === 'status' && !['open', 'cancelled'].includes(v)) throw new UserError('status can be set to open or cancelled');
-      it[k] = k === 'deadline' ? parseDeadline(v, led.now()) : clean(v);
-      if (k === 'deadline') it.deadline_text = clean(v);
+      if (k === 'status') it.status = v; else applyField(it, k, v, by, led.now());
+      // An explicit edit is the team's answer to any open conflict on that field.
+      for (const c of openConflicts(it).filter((c) => c.field === k)) Object.assign(c, { status: 'settled', settled_value: clean(v), settled_by: clean(by), settled_at: at });
       changed.push(k);
     }
     it.updated_at = at;
-    it.evidence.push({ text: `updated ${changed.join(', ')}`, by: clean(by), at, kind: 'update' });
+    it.evidence.push({ text: `updated ${changed.join(', ')}`, by: clean(by), at, kind: 'update', trust: trustOf(by) });
     led.log(`edited ${id} (${changed.join(', ')}) by ${by || 'unknown'}`);
     return { result: 'updated', item: it };
   });
@@ -283,6 +434,7 @@ export function upsertPerson(led, input) {
   return led.tx((db) => {
     let p = findPerson(db, input.name) || (input.aliases || []).map((a) => findPerson(db, a)).find(Boolean);
     if (!p) { p = { name: clean(input.name), aliases: [], role: null, organization: null, notes: null, created_at: led.now().toISOString() }; db.people.push(p); }
+    p.registered = true; // added on purpose by a teammate, so a valid outbound target
     for (const a of [input.name, ...(input.aliases || [])]) if (norm(a) !== norm(p.name) && !p.aliases.some((x) => norm(x) === norm(a))) p.aliases.push(clean(a));
     for (const k of ['role', 'organization', 'notes']) if (input[k]) p[k] = clean(input[k]);
     return { result: 'ok', person: p };
@@ -291,21 +443,47 @@ export function upsertPerson(led, input) {
 
 // ---------- approval-gated actions ----------
 const ACTION_KINDS = ['send_message', 'create_task', 'create_calendar_event'];
+// What an approval is bound to. If any of this changes before approval, the draft is stale.
+const snapshot = (it) => ({ status: it.status, owner: it.owner || null, party: partyOf(it) || null, subject: subjectOf(it), deadline: it.deadline || null });
+export const itemVersion = (it) => crypto.createHash('sha256').update(JSON.stringify(snapshot(it))).digest('hex').slice(0, 12);
+function snapshotDiff(before, after) {
+  const show = (k, v) => (v == null ? '—' : k === 'deadline' ? fmtDate(v) : v);
+  return Object.keys(before).filter((k) => before[k] !== after[k]).map((k) => `${k}: ${show(k, before[k])} → ${show(k, after[k])}`).join('; ');
+}
+const hasTeamEvidence = (it) => it.evidence.some((e) => e.trust !== 'external');
+function knownTarget(db, target) {
+  const n = norm(target);
+  if (db.people.some((p) => p.registered && namesFor(db, p.name).has(n))) return true;
+  return db.items.some((it) => hasTeamEvidence(it) && partiesOf(it).some((p) => namesFor(db, p).has(n)));
+}
+// Provenance-trust gate: an action is high risk when what it rests on did not come from the team.
+export function actionRisk(db, a) {
+  const reasons = [];
+  const it = a.item_id && db.items.find((x) => x.id === a.item_id);
+  if (it && !hasTeamEvidence(it)) reasons.push(`${it.id} is backed only by external content`);
+  if (a.target && !knownTarget(db, a.target)) reasons.push(`target "${a.target}" is not a contact known from team messages`);
+  return { level: reasons.length ? 'high' : 'normal', reasons };
+}
+
 export function propose(led, input) {
   if (!ACTION_KINDS.includes(input.kind)) throw new UserError(`kind must be one of ${ACTION_KINDS.join(', ')}`);
   if (!input.body) throw new UserError('body (the exact draft) is required');
   return led.tx((db) => {
-    const key = crypto.createHash('sha256').update([input.kind, norm(input.target), input.body].join('\u0000')).digest('hex').slice(0, 16);
-    const existing = db.actions.find((a) => a.idempotency_key === key && a.status !== 'cancelled');
-    if (existing) return { result: 'duplicate', action: existing };
+    const it = input.item_id ? db.items.find((x) => x.id === input.item_id) : null;
+    if (input.item_id && !it) throw new UserError(`no item ${input.item_id}`);
+    const key = crypto.createHash('sha256').update([input.kind, norm(input.target), input.body, it ? itemVersion(it) : ''].join('\u0000')).digest('hex').slice(0, 16);
+    const existing = db.actions.find((a) => a.idempotency_key === key && !['cancelled', 'stale'].includes(a.status));
+    if (existing) return { result: 'duplicate', action: existing, risk: actionRisk(db, existing) };
     const a = {
       id: `A-${++db.seq.A}`, kind: input.kind, target: clean(input.target), channel: clean(input.channel), body: redact(String(input.body)),
-      item_id: input.item_id || null, status: 'pending_approval', idempotency_key: key,
+      item_id: input.item_id || null, item_version: it ? itemVersion(it) : null, item_snapshot: it ? snapshot(it) : null,
+      status: 'pending_approval', idempotency_key: key, approvals: [],
       proposed_by: clean(input.by), created_at: led.now().toISOString(), approved_by: null, approved_at: null, executed_at: null, receipt: null,
     };
     db.actions.push(a);
-    led.log(`drafted ${a.id} (${a.kind} → ${a.target || 'unspecified'}) awaiting approval`);
-    return { result: 'pending_approval', action: a };
+    const risk = actionRisk(db, a);
+    led.log(`drafted ${a.id} (${a.kind} → ${a.target || 'unspecified'}) awaiting approval${risk.level === 'high' ? ' — high risk, needs two approvers' : ''}`);
+    return { result: 'pending_approval', action: a, risk, ...(risk.level === 'high' ? { message: `High risk (${risk.reasons.join('; ')}): two different teammates must approve ${a.id}.` } : {}) };
   });
 }
 export function approve(led, id, by) {
@@ -315,9 +493,30 @@ export function approve(led, id, by) {
   return led.tx((db) => {
     const a = db.actions.find((x) => x.id === id);
     if (!a) throw new UserError(`no action ${id}`);
+    if (a.status === 'stale') throw new UserError(`${id} is stale (${a.stale_reason}); draft a new one`);
     if (a.status !== 'pending_approval') throw new UserError(`${id} is ${a.status}; it will not be executed again`);
-    a.status = 'approved'; a.approved_by = clean(by); a.approved_at = led.now().toISOString();
-    led.log(`approved ${id} by ${by}`);
+    const at = led.now().toISOString();
+    if (a.item_id) {
+      const it = db.items.find((x) => x.id === a.item_id);
+      const diff = !it ? 'the item no longer exists' : a.item_version && itemVersion(it) !== a.item_version ? snapshotDiff(a.item_snapshot, snapshot(it)) : '';
+      if (diff) {
+        a.status = 'stale'; a.stale_reason = `${a.item_id} changed since this draft — ${diff}`; a.stale_at = at;
+        led.log(`stale ${id}: ${a.stale_reason}`);
+        return { result: 'stale', action: a, reason: a.stale_reason, instruction: 'Nothing was sent. Tell the team the draft is out of date, re-read the item, and draft a new follow-up only if one is still needed.' };
+      }
+      const open = openConflicts(it);
+      if (open.length) throw new UserError(`${it.id} has an open conflict (${open.map((c) => `${c.field}: "${c.current_text}" vs "${c.proposed_text}"`).join('; ')}); settle it before approving`);
+    }
+    a.approvals ||= [];
+    if (a.approvals.some((x) => norm(x.by) === norm(by))) throw new UserError(`${id} was already approved by ${by}; a different teammate must give the second approval`);
+    a.approvals.push({ by: clean(by), at });
+    const risk = actionRisk(db, a);
+    if (risk.level === 'high' && a.approvals.length < 2) {
+      led.log(`first approval of ${id} by ${by}; high risk, waiting for a second teammate`);
+      return { result: 'needs_second_approval', action: a, risk, message: `High risk (${risk.reasons.join('; ')}). A second, different teammate must reply "approve ${id}". Nothing was sent.` };
+    }
+    a.status = 'approved'; a.approved_by = a.approvals.map((x) => x.by).join(', '); a.approved_at = at;
+    led.log(`approved ${id} by ${a.approved_by}`);
     return { result: 'approved', action: a, instruction: 'Execute this exact action once with the configured tool, then run `done` with the receipt. If no tool is configured, run `cancel` and tell the user.' };
   });
 }
@@ -340,6 +539,8 @@ export function query(db, f = {}, now = new Date()) {
   const status = f.status || 'open';
   if (status !== 'all') items = items.filter((i) => i.status === status);
   if (f.type) items = items.filter((i) => i.type === f.type);
+  if (f.direction) items = items.filter((i) => dirOf(i) === f.direction);
+  if (f.conflicts) items = items.filter((i) => openConflicts(i).length);
   if (f.person) { const names = namesFor(db, f.person); items = items.filter((i) => partiesOf(i).some((p) => names.has(norm(p)))); }
   if (f.owner) { const names = namesFor(db, f.owner); items = items.filter((i) => i.owner && names.has(norm(i.owner))); }
   if (f.unowned) items = items.filter((i) => i.type !== 'decision' && (!i.owner || norm(i.owner) === 'unassigned'));
@@ -368,7 +569,7 @@ function dueLabel(it, now) {
   return fmtDate(it.deadline);
 }
 function describe(it) {
-  if (it.type === 'commitment') return `${it.owner || 'unassigned'} → ${it.counterparty || '—'}: ${it.action}`;
+  if (it.type === 'commitment') return `${it.owner || 'unassigned'} → ${it.counterparty || '—'}: ${it.action}${dirOf(it) === 'inbound' ? ' (they owe us)' : ''}`;
   if (it.type === 'issue') return `${it.stakeholder || 'unknown reporter'}: ${it.title}`;
   return it.decision;
 }
@@ -378,41 +579,56 @@ export function formatItem(it, now, { provenance = true } = {}) {
   const lines = [`${it.id} [${it.type}] ${describe(it)}`];
   if (it.type !== 'decision') lines.push(`   Owner: ${it.owner || 'unassigned'} · Due: ${dueLabel(it, now)} · Status: ${it.status}`);
   else lines.push(`   Decided: ${it.date}${it.participants?.length ? ' · by ' + it.participants.join(', ') : ''}`);
-  if (provenance && first) lines.push(`   Source: "${clip(first.text, 140)}" — ${first.by || 'unknown'}, ${first.channel || 'unknown channel'}${first.ref ? ' #' + first.ref : ''}, ${fmtDate(first.at)}`);
-  if (provenance && last !== first) lines.push(`   Latest: "${clip(last.text, 140)}" — ${last.by || 'unknown'}, ${fmtDate(last.at)}`);
+  for (const c of openConflicts(it)) lines.push(`   ⚠ Conflict ${c.id} on ${c.field}: "${c.current_text}" (${c.current_by || 'unknown'}) vs "${c.proposed_text}" (${c.by || 'unknown'})`);
+  const ext = (e) => (e.trust === 'external' ? ' [external]' : '');
+  if (provenance && first) lines.push(`   Source: "${clip(first.text, 140)}" — ${first.by || 'unknown'}${ext(first)}, ${first.channel || 'unknown channel'}${first.ref ? ' #' + first.ref : ''}, ${fmtDate(first.at)}`);
+  if (provenance && last !== first) lines.push(`   Latest: "${clip(last.text, 140)}" — ${last.by || 'unknown'}${ext(last)}, ${fmtDate(last.at)}`);
   return lines.join('\n');
 }
 
 export function brief(db, now = new Date(), { staleDays = 3 } = {}) {
   const open = query(db, {}, now).filter((i) => i.type !== 'decision');
+  const inbound = (i) => dirOf(i) === 'inbound';
   const overdue = open.filter((i) => i.deadline && new Date(i.deadline) < now);
   const today = open.filter((i) => i.deadline && sameLocalDay(i.deadline, now) && !overdue.includes(i));
   const issues = open.filter((i) => i.type === 'issue' && !overdue.includes(i) && !today.includes(i));
-  const waiting = open.filter((i) => i.type === 'commitment' && i.counterparty && !overdue.includes(i) && !today.includes(i));
-  const shown = new Set([...overdue, ...today, ...issues, ...waiting]);
+  const waiting = open.filter((i) => i.type === 'commitment' && !inbound(i) && i.counterparty && !overdue.includes(i) && !today.includes(i));
+  const owed = open.filter((i) => inbound(i) && !overdue.includes(i) && !today.includes(i));
+  const shown = new Set([...overdue, ...today, ...issues, ...waiting, ...owed]);
   const stale = open.filter((i) => !shown.has(i) && (now - new Date(i.updated_at)) / 86400000 >= staleDays);
   const unowned = open.filter((i) => !i.owner || norm(i.owner) === 'unassigned');
+  const conflicted = db.items.filter((i) => ['open', 'tentative'].includes(i.status) && openConflicts(i).length);
+  const tentative = db.items.filter((i) => i.status === 'tentative');
   const pending = db.actions.filter((a) => a.status === 'pending_approval');
   const total = shown.size + stale.length;
   const out = [`RELAY — Morning (${now.toDateString()})`];
-  if (!total && !pending.length) return out.concat('No open loops. Nothing is waiting on the team.').join('\n');
+  if (!total && !pending.length && !conflicted.length && !tentative.length) return out.concat('No open loops. Nothing is waiting on the team.').join('\n');
   out.push(`${total} open loop${total === 1 ? ' needs' : 's need'} attention`);
   let n = 0;
   const section = (title, list) => {
     if (!list.length) return;
     out.push('', title);
     for (const it of list) {
-      const who = it.type === 'issue' ? it.stakeholder || 'unknown reporter' : it.counterparty || it.owner || 'team';
+      const who = it.type === 'issue' ? it.stakeholder || 'unknown reporter' : inbound(it) ? `${it.owner} owes us` : it.counterparty || it.owner || 'team';
       out.push(`${++n}. ${who} — ${subjectOf(it)} (${it.id})`, `   Due: ${dueLabel(it, now)} · Owner: ${it.owner || 'unassigned'}`, `   Last evidence: "${clip(it.evidence.at(-1).text, 100)}" (${fmtDate(it.evidence.at(-1).at)})`);
     }
   };
   section('Overdue', overdue);
   section('Due today', today);
+  if (conflicted.length) {
+    out.push('', 'Conflicting details — confirm');
+    for (const it of conflicted) for (const c of openConflicts(it)) out.push(`- ${it.id} ${c.field}: "${c.current_text}" (${c.current_by || 'unknown'}) vs "${c.proposed_text}" (${c.by || 'unknown'})`);
+  }
   section('Open customer / partner issues', issues);
   section('People waiting on the team', waiting);
+  section('Waiting on others', owed);
   section(`Stale (no update in ${staleDays}+ days)`, stale);
+  if (tentative.length) {
+    out.push('', 'To confirm');
+    for (const it of tentative) out.push(`- ${it.id} ${describe(it)} — reply "confirm ${it.id}" or "reject ${it.id}"`);
+  }
   if (unowned.length) out.push('', `Unowned: ${unowned.map((i) => i.id).join(', ')} — assign an owner.`);
-  if (pending.length) out.push('', `Drafts awaiting approval: ${pending.map((a) => `${a.id} (${a.kind} → ${a.target || '?'})`).join(', ')}`);
+  if (pending.length) out.push('', `Drafts awaiting approval: ${pending.map((a) => `${a.id} (${a.kind} → ${a.target || '?'}${a.approvals?.length ? `, ${a.approvals.length} of 2 approvals` : ''})`).join(', ')}`);
   const next = [...overdue, ...today, ...issues].slice(0, 3).map((i) => `- ${i.next_action || subjectOf(i)} (${i.id})`);
   if (next.length) out.push('', 'Next:', ...next);
   return out.join('\n');
@@ -448,18 +664,22 @@ const readJson = (opt) => {
 };
 
 const HELP = `relay <command>
-  extract --text T [--speaker S] [--channel C] [--session X] [--ref R]   heuristic candidates (no writes)
-  capture --json '{type,...}'                 record commitment|issue|decision (deduplicated)
+  extract --text T [--speaker S] [--channel C] [--session X] [--ref R] [--external]   heuristic candidates (no writes)
+  capture --json '{type,...}'                 record commitment|issue|decision (deduplicated; low confidence → tentative;
+                                              direction:"inbound" = someone owes us; trust:"external" = not from the team)
+  confirm ID [--by S] [--json '{patch}'] | reject ID [--by S] [--evidence T]   tentative items
+  settle ID --field deadline|owner --value V [--by S]                         pick the right value in a conflict
   resolve ID --evidence T [--by S] [--ref R]  close an item (evidence required)
   cancel-item ID --evidence T [--by S]        mark an item cancelled
   update ID --json '{field:value}' [--by S]   edit owner/deadline/next_action/...
-  list [--status open|resolved|cancelled|all] [--type T] [--person P] [--owner P] [--unowned] [--overdue] [--due-today] [--since ISO] [--text Q] [--json]
+  list [--status open|tentative|resolved|cancelled|rejected|all] [--type T] [--waiting-on] [--we-owe] [--conflicts] [--person P] [--owner P] [--unowned] [--overdue] [--due-today] [--since ISO] [--text Q] [--json]
   show ID [--json]                            item with full provenance
   brief                                       morning brief
   changes --since ISO|yesterday
   person --json '{name,aliases,role,organization,notes}' | people
   propose --json '{kind,target,channel,body,item_id}'   draft an outbound action
   approve A-ID --by S | done A-ID --receipt R | cancel A-ID | actions
+env: RELAY_TEAM=a,b,c (teammates; others are external) · RELAY_APPROVERS=a,b · RELAY_TZ
 global: --data DIR (default $RELAY_DATA or ./relay-data), --memory DIR|none (default $RELAY_MEMORY_DIR or ./memory), --now ISO`;
 
 export function main(argv, io = { out: (s) => process.stdout.write(s + '\n') }) {
@@ -472,20 +692,24 @@ export function main(argv, io = { out: (s) => process.stdout.write(s + '\n') }) 
   const by = opt.by || opt.speaker || ctx.senderName || ctx.sender || ctx.senderId || null;
   const json = (x) => io.out(JSON.stringify(x, null, 2));
   switch (cmd) {
-    case 'extract': return json(extract(opt.text === true ? fs.readFileSync(0, 'utf8') : opt.text || '', { speaker: by, channel: opt.channel || ctx.channel || null, session: opt.session || null, ref: opt.ref || ctx.messageId || null }));
+    case 'extract': return json(extract(opt.text === true ? fs.readFileSync(0, 'utf8') : opt.text || '', { speaker: by, channel: opt.channel || ctx.channel || null, session: opt.session || null, ref: opt.ref || ctx.messageId || null, external: !!opt.external }));
     case 'capture': { const input = readJson(opt); if (!input.speaker && by) input.speaker = by; if (!input.source_channel && ctx.channel) input.source_channel = ctx.channel; return json(capture(led, input)); }
     case 'resolve': return json(resolve(led, id, { evidence: opt.evidence, by, ref: opt.ref, channel: opt.channel || ctx.channel }));
     case 'cancel-item': return json(resolve(led, id, { evidence: opt.evidence, by, ref: opt.ref, status: 'cancelled' }));
     case 'update': return json(update(led, id, readJson(opt), by));
     case 'list': {
       const db = led.read();
-      const items = query(db, { status: opt.status, type: opt.type, person: opt.person, owner: opt.owner, unowned: opt.unowned, overdue: opt.overdue, dueToday: opt['due-today'], since: opt.since, text: opt.text }, now);
+      const direction = opt['waiting-on'] ? 'inbound' : opt['we-owe'] ? 'outbound' : undefined;
+      const items = query(db, { status: opt.status, type: opt.type, direction, conflicts: opt.conflicts, person: opt.person, owner: opt.owner, unowned: opt.unowned, overdue: opt.overdue, dueToday: opt['due-today'], since: opt.since, text: opt.text }, now);
       if (opt.json) return json(items);
       return io.out(items.length ? items.map((i) => formatItem(i, now)).join('\n') : 'Nothing matches.');
     }
-    case 'show': { const db = led.read(); const act = db.actions.find((a) => a.id === id); if (act) return json(act); const it = db.items.find((i) => i.id === id); if (!it) throw new UserError(`no item or action ${id}`); return opt.json ? json(it) : io.out(formatItem(it, now) + '\n   History:\n' + it.evidence.map((e) => `   - ${e.kind} ${fmtDate(e.at)} ${e.by || 'unknown'} (${e.channel || '?'}${e.ref ? ' #' + e.ref : ''}): "${e.text}"`).join('\n')); }
+    case 'show': { const db = led.read(); const act = db.actions.find((a) => a.id === id); if (act) return json(act); const it = db.items.find((i) => i.id === id); if (!it) throw new UserError(`no item or action ${id}`); return opt.json ? json(it) : io.out(formatItem(it, now) + '\n   History:\n' + it.evidence.map((e) => `   - ${e.kind} ${fmtDate(e.at)} ${e.by || 'unknown'}${e.trust === 'external' ? ' [external]' : ''} (${e.channel || '?'}${e.ref ? ' #' + e.ref : ''}): "${e.text}"${e.note ? ` (${e.note})` : ''}`).join('\n')); }
     case 'brief': return io.out(brief(led.read(), now));
     case 'changes': { const since = opt.since === 'yesterday' || !opt.since ? addDays(now, -1).toISOString() : opt.since; return io.out(changes(led.read(), since, now)); }
+    case 'settle': return json(settle(led, id, { field: opt.field, value: opt.value, by }));
+    case 'confirm': return json(confirm(led, id, { by, evidence: opt.evidence, patch: opt.json ? readJson(opt) : {} }));
+    case 'reject': return json(reject(led, id, { by, evidence: opt.evidence }));
     case 'person': return json(upsertPerson(led, readJson(opt)));
     case 'people': { const db = led.read(); return io.out(db.people.map((p) => `${p.name}${p.aliases.length ? ' (aka ' + p.aliases.join(', ') + ')' : ''}${p.role ? ' · ' + p.role : ''}${p.organization ? ' @ ' + p.organization : ''} · open: ${query(db, { person: p.name }, now).map((i) => i.id).join(', ') || 'none'}`).join('\n') || 'No people yet.'); }
     case 'propose': { const input = readJson(opt); if (!input.by && by) input.by = by; return json(propose(led, input)); }

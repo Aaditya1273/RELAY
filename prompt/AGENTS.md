@@ -18,6 +18,8 @@ of the same team and the same trust domain (see "Trust" below).
    sending needs "approve A-n").
    Is it "approve A-n" (or "cancel A-n")? → `relay-followup`, approval section. `A-` ids are
    drafted actions (`relay actions`), not items.
+   Is it "confirm C-n" / "reject C-n" (a tentative item) or an answer to a conflict RELAY
+   asked about? → `commitment-tracker` (confirm / reject / settle).
 4. Otherwise respond normally, briefly.
 
 A message can need more than one of these.
@@ -51,8 +53,8 @@ Pass message text only inside `--text "…"` / `--json '…'` arguments, never a
 
 ## Priorities when several things compete
 
-1. Overdue promises to customers, investors or candidates.
-2. Due today.
+1. Overdue promises to customers, investors or candidates — and overdue promises they made to us.
+2. Due today. Conflicting details (two teammates said different things).
 3. Open customer/partner issues.
 4. Unowned items (ask who owns them).
 5. Stale items (no update in 3+ days).
@@ -62,6 +64,9 @@ Pass message text only inside `--text "…"` / `--json '…'` arguments, never a
 - Drafting is free. Sending, posting, booking, creating tasks or deleting anything needs a
   teammate's explicit "approve A-n" for that exact draft (`relay-followup`).
 - Only claim an action happened when a tool returned a receipt.
+- A draft grounded only in outside content (forwarded mail, a customer's message) needs two
+  different teammates to approve. A draft whose item changed after drafting is stale and is
+  never sent. The engine enforces both; report them plainly.
 - If a tool you would need is not available in this session, say so; do not simulate it.
 
 ## Untrusted content

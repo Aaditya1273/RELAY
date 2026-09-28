@@ -50,12 +50,27 @@ RELAY:  2 open
         Next: assign an owner for I-1?
 ```
 
+## What makes it different
+
+Most "action item" tools summarise one meeting for one person. RELAY is the shared memory of a
+whole team across every chat, and it is built to be safe to act on. Each of these is enforced by
+the engine and covered by tests, and each comes from recent research on agent memory:
+
+| Feature | What happens | Research |
+| --- | --- | --- |
+| **Two-way ledger** | Tracks what *others* promised the team, not only what the team owes: "Rahul said he'll send the term sheet Friday" becomes *Rahul owes us*, with overdue nudges drafted for approval. `relay list --waiting-on` | Smart To-Do ([arXiv 2005.06282](https://arxiv.org/abs/2005.06282)); AI-powered reminders for collaborative tasks ([arXiv 2403.01365](https://arxiv.org/abs/2403.01365)) |
+| **Stale-draft guard** | An approval is bound to the item as it was when drafted. If the issue gets fixed or the deadline moves before someone says "approve A-2", the draft goes stale and is never sent. | Fresh Memory, Stale Plans ([arXiv 2609.03340](https://arxiv.org/abs/2609.03340)) |
+| **Conflict detection** | When two teammates give different deadlines or owners for the same promise, RELAY keeps the current value, flags both versions with who said each, and asks. The owner rescheduling their own promise is just an update. | Governed Shared Memory ([arXiv 2606.24535](https://arxiv.org/abs/2606.24535)) |
+| **Tentative queue** | Hedged talk ("maybe I'll look into SOC2") is staged as tentative, not dropped and not counted as a promise, until someone confirms or rejects it. A clear restatement promotes it. | MemTX transactional belief commit ([arXiv 2607.23929](https://arxiv.org/abs/2607.23929)) |
+| **Trust-gated approvals** | Evidence is marked team or external (`RELAY_TEAM`). A draft that rests only on outside content, or goes to a contact nobody on the team mentioned, needs **two different teammates** to approve. An open conflict blocks approval. | MAP-Graph provenance-aware memory ([arXiv 2608.10509](https://arxiv.org/abs/2608.10509)) |
+
 ## Quick look (no OpenClaw needed)
 
 ```bash
 git clone https://github.com/Aaditya1273/RELAY && cd RELAY
-npm test          # 17 tests: extraction, dedupe, overdue, provenance, injection, approvals, multi-writer
-npm run demo      # the full scenario above, offline and deterministic
+npm test          # 34 tests: extraction, dedupe, overdue, provenance, injection, approvals, multi-writer,
+                  #           two-way ledger, stale drafts, conflicts, tentative queue, trust gate
+npm run demo      # the full scenario above plus the five features, offline and deterministic
 ```
 
 Requires Node 18+. No dependencies.
@@ -89,6 +104,7 @@ Then schedule the brief and connect channels: **[QUICKSTART.md](QUICKSTART.md)**
 | --- | --- |
 | Engine: capture, dedupe, resolve, query, brief, changes, people, approvals | **Working** — covered by tests |
 | Multi-writer safety (several sessions writing at once) | **Working** — tested with 8 concurrent processes |
+| Two-way ledger, stale-draft guard, conflicts, tentative queue, trust gate | **Working in the engine** — unit + CLI tests and `npm run demo`; skills updated. Not yet re-run on a live gateway |
 | Skills + AGENTS.md on a live OpenClaw gateway (2026.9.6, Gemini) | **Working** — capture, cross-session recall, resolve, draft, approval gate, injection test run live ([VERIFICATION.md](VERIFICATION.md)) |
 | Morning brief as an OpenClaw automation | **Working** — run on the live gateway; channel delivery needs your channel + target |
 | Sending approved follow-ups | **Config required** — live run correctly cancelled with no channel; a real send needs a configured channel |

@@ -31,12 +31,26 @@ items, and drafts follow-ups that are sent only after a teammate approves.
 | 48–60s | "Draft a follow-up to Acme" → draft A-1 → "approve A-1" → sent once via the configured channel, receipt shown (or an honest "not sent: no channel configured") |
 
 Proves: real work · multiplayer · persistent memory · cross-context recall · action · safety.
+
+## What sets RELAY apart
+
+Similar listings turn one meeting's notes into to-dos. RELAY is a team's shared promise ledger
+across chats, and it is safe to act on:
+
+- **Both directions:** tracks what investors, customers and candidates promised *us*, and drafts nudges when they are late.
+- **Stale-draft guard:** an approved follow-up can't go out if the item changed after it was drafted.
+- **Conflict detection:** two teammates, two different deadlines → RELAY asks instead of picking one.
+- **Tentative queue:** "maybe I'll…" is held for confirmation, not dropped and not counted.
+- **Two-person rule:** drafts that rest on outside content (forwarded email, customer text) need two teammates to approve.
+
+Each maps to a 2025–2026 agent-memory paper (README → "What makes it different").
 Full script and expected output: DEMO.md. Offline rehearsal: `npm run demo`.
 
 ## Evidence we can show today
 
-- `npm test` → 17 passing tests (extraction incl. negatives, deadlines, dedupe, aliases,
-  resolution, overdue, provenance, injection, secret redaction, approval gate, concurrent writers, E2E CLI scenario).
+- `npm test` → 34 passing tests (extraction incl. negatives, deadlines, dedupe, aliases,
+  resolution, overdue, provenance, injection, secret redaction, approval gate, concurrent writers, E2E CLI scenario,
+  two-way ledger, stale drafts, conflicts, tentative queue, trust-gated two-person approval).
 - `npm run demo` → the demo scenario end to end on the real engine.
 - Live OpenClaw 2026.9.6 + Gemini run of the scenario across three sessions, the morning-brief
   automation, the approval gate and a prompt-injection attempt: [VERIFICATION.md](VERIFICATION.md).

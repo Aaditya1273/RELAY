@@ -15,15 +15,26 @@ Engine: `node {baseDir}/../commitment-tracker/scripts/relay.mjs` (`relay` below)
 3. Register it:
    `relay propose --json '{"kind":"send_message","target":"Acme","channel":"<channel:conversation>","item_id":"I-1","body":"<exact text>"}'`
    Kinds: `send_message`, `create_task`, `create_calendar_event`.
+   Always pass `item_id` when the draft is about an item: the approval is then bound to the
+   item as it is now, and goes stale if the item changes before someone approves.
+   For an inbound item ("they owe us"), the draft is a polite nudge to the person who owes it.
 4. Show the draft verbatim with its id and say: reply **approve A-1** to send, or edit it.
+   If the result has `risk.level: "high"`, also say why (`risk.reasons`) and that two
+   different teammates must approve it.
    (Use "approve A-1", not `/approve` — `/approve` is OpenClaw's exec-approval command.)
 
 ## Approve and execute
 
 Only when a teammate replies with approval naming the action id:
 
-1. `relay approve A-1 --by "<approver>"`. If it fails (already approved/executed, not an
-   allowed approver), stop and report the error.
+1. `relay approve A-1 --by "<approver>"`. Then, by `result`:
+   - `approved` → continue with step 2.
+   - `needs_second_approval` → nothing is sent yet. Say that a second, different teammate
+     must reply "approve A-1". Stop.
+   - `stale` → the item changed after the draft (the `reason` says how). Nothing is sent.
+     Tell the team, and draft a new one only if it is still needed.
+   - An error (already approved/executed, not an allowed approver, same person approving
+     twice, open conflict on the item) → stop and report it.
 2. Execute exactly the stored `body` to the stored `target`, once, with a tool that is
    actually available in this session:
    - `send_message`: the `message` tool to a conversation this agent can reach.

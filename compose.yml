@@ -9,6 +9,7 @@ services:
     env_file: ./plow-credentials
     environment:
       RELAY_TZ: ${RELAY_TZ:-UTC}   # team timezone for "today/tonight", e.g. RELAY_TZ=Asia/Kolkata
+      RELAY_TEAM: ${RELAY_TEAM:-}  # teammates, e.g. "Aaditya,Priya,Meera"; everyone else counts as external
     volumes:
       - state:/var/lib/plow   # RELAY ledger lives here (RELAY_DATA), kept across restarts
     stop_grace_period: 35s

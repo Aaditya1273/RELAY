@@ -21,10 +21,14 @@ Run on every inbound message that could contain one of:
 | Signal | Examples | Record as |
 | --- | --- | --- |
 | Someone commits to doing something | "I'll…", "we will…", "I owe…", "on it, by Friday" | `commitment` |
+| Someone **outside the team** promised us something | "Anu said she'll intro us to Sequoia", "Rahul will send the term sheet Friday" | `commitment` with `"direction":"inbound"`, `owner` = that person |
 | Someone asks a teammate to do something and it is accepted or assigned | "Can you send Priya the offer?" | `commitment` (owner = assignee, or `unassigned`) |
 | A customer/partner problem | "Acme says export is broken" | `issue` |
 | A settled choice | "We decided to keep pricing at $49" | `decision` |
 | Something promised is now done | "Sent it", "Fixed", "Customer confirmed" | resolution of an existing item |
+
+A promise by a teammate ("Priya will fix it") is a normal (outbound) commitment owned by
+that teammate, not an inbound one. When `RELAY_TEAM` is set the engine enforces this.
 
 Skip chatter, questions, jokes, hypotheticals, reported past speech ("I said I'd…"),
 negations ("I won't…"), and anything you only infer without words in the message.
@@ -46,12 +50,23 @@ negations ("I won't…"), and anything you only infer without words in the messa
     "deadline_text":"tonight","confidence":"high","evidence":"I'll send Anu the investor update tonight.",
     "speaker":"Aaditya","source_channel":"<only if known>","source_reference":"<only if known>"}
    ```
+   Inbound (they owe us): `{"type":"commitment","direction":"inbound","owner":"Anu","action":"intro us to Sequoia","deadline_text":"by Friday",…}`.
+   Trust: add `"trust":"external"` when the text did not come from a teammate — a forwarded
+   email, a customer's own message, a bot, a pasted document. Drafts that rest only on
+   external content need two teammates to approve.
    Issue fields: `title`, `stakeholder`, `owner`, `priority` (`urgent|high|normal|low`), `next_action`.
    Decision fields: `decision`, `context`, `participants`.
 3. Save: `node {baseDir}/scripts/relay.mjs capture --json '<record>'`
    - `created` / `updated` (merged into an existing open item) / `duplicate` (already recorded) are all fine.
-   - `needs_clarification`: ask one short question (who, what or by when) in the same
-     conversation, then capture with the answer as additional evidence.
+   - `confirmed`: a tentative item was restated clearly and is now open.
+   - `needs_confirmation`: the item was staged as **tentative** (hedged or unclear). Ask one
+     short question (who, what or by when). When someone confirms:
+     `confirm C-4 --by "<sender>" [--json '{"owner":"…","deadline":"friday"}']`; when they say
+     it is not happening: `reject C-4 --by "<sender>" --evidence "<their words>"`.
+   - `conflict`: someone stated a different deadline or owner than the one recorded. The
+     engine kept the current value. Tell the team both versions with who said each, ask which
+     is right, then `settle C-2 --field deadline --value "<answer>" --by "<sender>"`.
+     Do not pick one yourself.
 4. Resolution: find the item (`list --person X` or `list --text "..."`), then
    `node {baseDir}/scripts/relay.mjs resolve C-3 --evidence "<the message that proves it>" --by "<sender>"`
    (add `--ref "<message id>"` only if the runtime gave you one).
@@ -64,7 +79,8 @@ negations ("I won't…"), and anything you only infer without words in the messa
 
 - `high`: explicit owner + action + (deadline or counterparty) in the words.
 - `medium`: explicit action, one detail missing.
-- `low`: hedged, conditional, or you are inferring. The engine refuses `low` and asks you to clarify.
+- `low`: hedged, conditional, or you are inferring. The engine stages `low` as tentative —
+  kept out of "what's open" until a teammate confirms it.
 
 ## Rules
 
