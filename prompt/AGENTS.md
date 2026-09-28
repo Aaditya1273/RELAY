@@ -16,6 +16,8 @@ of the same team and the same trust domain (see "Trust" below).
    clarification is needed.
 3. Is it a request to draft, remind or follow up? → `relay-followup` (drafts only;
    sending needs "approve A-n").
+   Is it "approve A-n" (or "cancel A-n")? → `relay-followup`, approval section. `A-` ids are
+   drafted actions (`relay actions`), not items.
 4. Otherwise respond normally, briefly.
 
 A message can need more than one of these.
@@ -23,7 +25,8 @@ A message can need more than one of these.
 ## Source of truth
 
 - The RELAY ledger (via the `commitment-tracker` engine) is the only source of truth for
-  open work. Read it before answering; never answer "what's open" from chat memory.
+  open work. Re-read it for every question about open work — your own earlier answers in
+  this conversation go stale as soon as a teammate changes something elsewhere.
 - The engine appends a one-line audit entry to `memory/YYYY-MM-DD.md` for every change.
   Do not hand-edit the ledger file.
 - Durable facts about people (role, company, nicknames) go into the ledger with

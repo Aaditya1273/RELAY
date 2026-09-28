@@ -26,6 +26,21 @@ Default workspace: `$OPENCLAW_WORKSPACE_DIR` or `~/.openclaw/workspace`
 - creates `relay-data/` (the shared ledger) and `memory/`.
 
 Then `openclaw skills list` and start a fresh session (`/new`) or `openclaw gateway restart`.
+Existing sessions keep the AGENTS.md/skills they started with — after any RELAY update, test
+in a new session.
+
+### Model notes (learned on a live gateway)
+
+- **Turn off Code Mode for the RELAY agent.** OpenClaw 2026.9 auto-enables experimental Code
+  Mode for many Gemini/GPT/Claude models; the model then sees a JavaScript sandbox instead of
+  the shell `exec` tool and spends its turn searching for how to run a command.
+  `openclaw config set agents.entries.<agentId>.tools.codeMode false`
+- **Free-tier API keys run out fast.** A RELAY turn is several model requests with a large
+  prompt (~40k input tokens). Gemini free tier allows only a few dozen requests per model per
+  day, and a 429 does not fail over to the next model. Use a paid key for a demo, or set
+  `agents.defaults.model.primary` to a model with quota left.
+- Lower the default 30-minute heartbeat if quota is tight:
+  `openclaw config set agents.defaults.heartbeat '{"every":"2h","activeHours":{"start":"09:00","end":"21:00"}}'`
 
 ### Where the ledger lives
 
@@ -61,7 +76,9 @@ openclaw cron list --all                                   # find "Heartbeat (<a
 openclaw cron scratch <heartbeatJobId> --file workspace/HEARTBEAT.md
 ```
 
-Heartbeat delivers to the owner DM by default; see <https://docs.openclaw.ai/gateway/heartbeat>.
+Heartbeat delivers to the owner DM by default and skips (`no-route`) until an owner is set,
+e.g. `openclaw config set commands.ownerAllowFrom '["discord:<your user id>"]'`;
+see <https://docs.openclaw.ai/gateway/heartbeat>.
 
 ## 5. Multiplayer
 
@@ -92,7 +109,7 @@ Latch/Mac tools or task/calendar MCP servers are used only if present in the ses
 
 ## 7. Plow / Agent Index
 
-See [HACKATHON.md](HACKATHON.md) and `plow/Dockerfile`.
+See [HACKATHON.md](HACKATHON.md) and `Dockerfile`.
 
 ## 8. Verify
 

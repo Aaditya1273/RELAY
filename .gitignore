@@ -1,12 +1,13 @@
-# runtime state — never commit team memory
+# runtime state — never commit team memory or credentials
 relay-data/
 memory/
+.openclaw/
 *.lock
 *.tmp
-node_modules/
 .env
 .env.*
+plow-credentials
 **/*.pem
 **/*.key
-plow-credentials
+node_modules/
 .DS_Store

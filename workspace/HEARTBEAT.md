@@ -5,6 +5,8 @@ monitor scratch (see INSTALL.md):
 `openclaw cron scratch <heartbeat-job-id> --file HEARTBEAT.md`
 The morning brief is a separate scheduled automation, not part of the heartbeat.
 
+Engine: `node skills/commitment-tracker/scripts/relay.mjs` (from the workspace), called `relay` below.
+
 - Run `relay list --overdue`. For each item that became overdue since the last
   heartbeat, send one short nudge to its owner's conversation. Do not repeat a nudge for
   the same item on the same day.

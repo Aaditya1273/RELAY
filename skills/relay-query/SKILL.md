@@ -7,8 +7,9 @@ metadata: { "openclaw": { "requires": { "bins": ["node"] } } }
 # RELAY query
 
 Engine: `node {baseDir}/../commitment-tracker/scripts/relay.mjs` (call it `relay` below).
-Always answer from the ledger, never from memory of the chat — other teammates may have
-changed things in conversations you cannot see.
+Run the command on **every** question, even if you answered the same question a minute ago
+in this conversation. Earlier answers are stale: teammates change the ledger from
+conversations you cannot see. Never answer from chat memory.
 
 | Question | Command |
 | --- | --- |
@@ -29,7 +30,7 @@ The asker's name is the message sender. "We" means the whole team.
 ## Answer format
 
 - Lead with the count, then one line per item: who → whom, what, due, status, id.
-- Add the source line ("said by Aaditya in slack:#founders, Mon 10:00") for each item or
+- Add the source line ("said by <speaker> in <recorded channel>, <time>" — only what the ledger recorded) for each item or
   when asked. Quote evidence exactly; do not paraphrase it into something stronger.
 - If nothing matches, say so plainly. Do not pad.
 - Offer at most one next step (assign an owner, draft a follow-up).

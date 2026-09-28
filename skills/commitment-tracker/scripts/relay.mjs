@@ -483,7 +483,7 @@ export function main(argv, io = { out: (s) => process.stdout.write(s + '\n') }) 
       if (opt.json) return json(items);
       return io.out(items.length ? items.map((i) => formatItem(i, now)).join('\n') : 'Nothing matches.');
     }
-    case 'show': { const it = led.read().items.find((i) => i.id === id); if (!it) throw new UserError(`no item ${id}`); return opt.json ? json(it) : io.out(formatItem(it, now) + '\n   History:\n' + it.evidence.map((e) => `   - ${e.kind} ${fmtDate(e.at)} ${e.by || 'unknown'} (${e.channel || '?'}${e.ref ? ' #' + e.ref : ''}): "${e.text}"`).join('\n')); }
+    case 'show': { const db = led.read(); const act = db.actions.find((a) => a.id === id); if (act) return json(act); const it = db.items.find((i) => i.id === id); if (!it) throw new UserError(`no item or action ${id}`); return opt.json ? json(it) : io.out(formatItem(it, now) + '\n   History:\n' + it.evidence.map((e) => `   - ${e.kind} ${fmtDate(e.at)} ${e.by || 'unknown'} (${e.channel || '?'}${e.ref ? ' #' + e.ref : ''}): "${e.text}"`).join('\n')); }
     case 'brief': return io.out(brief(led.read(), now));
     case 'changes': { const since = opt.since === 'yesterday' || !opt.since ? addDays(now, -1).toISOString() : opt.since; return io.out(changes(led.read(), since, now)); }
     case 'person': return json(upsertPerson(led, readJson(opt)));

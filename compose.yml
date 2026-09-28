@@ -1,0 +1,11 @@
+# Local run of RELAY on the Plow OpenClaw base:  plow-agents deploy --local --line <ln_…>
+# plow-credentials is written by `plow-agents mint` / `deploy --local`; it is git- and docker-ignored.
+services:
+  agent:
+    build: .
+    env_file: ./plow-credentials
+    volumes:
+      - state:/var/lib/plow   # RELAY ledger lives here (RELAY_DATA), kept across restarts
+    stop_grace_period: 35s
+volumes:
+  state:

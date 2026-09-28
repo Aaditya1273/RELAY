@@ -78,7 +78,7 @@ Then schedule the brief and connect channels: **[QUICKSTART.md](QUICKSTART.md)**
 | `skills/relay-followup/` | drafts + approval-gated sending |
 | `prompt/AGENTS.md` | RELAY's operating rules (workspace AGENTS.md block; Plow prompt) |
 | `workspace/` | SOUL.md, MEMORY.md policy, HEARTBEAT.md checklist |
-| `plow/Dockerfile` | variant image on the Plow OpenClaw base |
+| `Dockerfile` | variant image on the Plow OpenClaw base |
 | `test/`, `scripts/demo.sh` | tests and offline demo |
 
 ## Status (honest)
@@ -87,9 +87,11 @@ Then schedule the brief and connect channels: **[QUICKSTART.md](QUICKSTART.md)**
 | --- | --- |
 | Engine: capture, dedupe, resolve, query, brief, changes, people, approvals | **Working** — covered by tests |
 | Multi-writer safety (several sessions writing at once) | **Working** — tested with 8 concurrent processes |
-| Skills + AGENTS.md on a live OpenClaw 2026.8.1 gateway | **Config required** — written against current docs, not yet run on a live gateway by us |
-| Morning brief automation, channel delivery | **Config required** — needs your channel + target |
-| Sending approved follow-ups | **Config required** — uses OpenClaw's `message` tool on a configured channel |
+| Skills + AGENTS.md on a live OpenClaw gateway (2026.9.6, Gemini) | **Working** — capture, cross-session recall, resolve, draft, approval gate, injection test run live ([VERIFICATION.md](VERIFICATION.md)) |
+| Morning brief as an OpenClaw automation | **Working** — run on the live gateway; channel delivery needs your channel + target |
+| Sending approved follow-ups | **Config required** — live run correctly cancelled with no channel; a real send needs a configured channel |
+| Discord / Telegram / other channels | **Config required** — see CHANNELS.md |
+| Plow image | **Config required** — Dockerfile + compose.yml ready; needs Docker running and `plow-agents login` |
 | Latch (Mac) actions, task/calendar creation | **Not implemented** beyond the approval gate; used only if a tool is present |
 | Gmail ingestion | **Not implemented** |
 

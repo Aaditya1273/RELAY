@@ -1,0 +1,9 @@
+.git
+.env
+.env.*
+plow-credentials
+relay-data
+memory
+.openclaw
+test
+node_modules

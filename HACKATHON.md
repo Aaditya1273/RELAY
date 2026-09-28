@@ -38,6 +38,8 @@ Full script and expected output: DEMO.md. Offline rehearsal: `npm run demo`.
 - `npm test` → 17 passing tests (extraction incl. negatives, deadlines, dedupe, aliases,
   resolution, overdue, provenance, injection, secret redaction, approval gate, concurrent writers, E2E CLI scenario).
 - `npm run demo` → the demo scenario end to end on the real engine.
+- Live OpenClaw 2026.9.6 + Gemini run of the scenario across three sessions, the morning-brief
+  automation, the approval gate and a prompt-injection attempt: [VERIFICATION.md](VERIFICATION.md).
 
 Not claimed: users, installs, token usage, success rates, testimonials, certifications.
 
@@ -51,11 +53,11 @@ Path A — Plow base image (recommended; usage reporting is built in):
 
 1. Install the `plow-agents` CLI: <https://github.com/plow-pbc/plow-agents>
 2. `plow-agents login` and `plow-agents lines` (pick a line; note its uid)
-3. Pick a base: <https://gallery.ecr.aws/e1h7x4a2/plow-cloud-agents> → `base-<sha>@sha256:<digest>`
-4. Build the variant from this repo root:
-   `plow-agents image build -f plow/Dockerfile --build-arg BASE_REF=public.ecr.aws/e1h7x4a2/plow-cloud-agents:base-<sha>@sha256:<digest> ghcr.io/<you>/relay:v1 .`
-   (If `image build` does not accept `-f/--build-arg`, `docker build` with the same args, then push.)
-5. Run locally first: `plow-agents deploy --local --line <line>`; text the line "hello", then run the demo script.
+3. The `Dockerfile` defaults to the base built from plow-openclaw-agent commit `e0217de`
+   (main on 2026-09-28). Before publishing, also pin its digest (`…:base-<sha>@sha256:<digest>`).
+4. Build from the repo root: `plow-agents image build ghcr.io/<you>/relay:v1`
+5. Run locally first (uses `compose.yml`): `plow-agents deploy --local --line <line>`;
+   text the line "hello", then walk through DEMO.md.
 6. The Dockerfile sets `AGENT_ID=relay`; the base image registers the listing and reports usage every five minutes when `AGENT_ID` is set. Change the slug if `relay` is taken.
 7. `plow-agents image push ghcr.io/<you>/relay:v1` and `plow-agents profile --show`
 8. Post uid, slug and the pushed image reference in the AI Worth Using Discord to get verified and 1-click deploy enabled.
