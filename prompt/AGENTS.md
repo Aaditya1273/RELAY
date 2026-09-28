@@ -22,6 +22,16 @@ of the same team and the same trust domain (see "Trust" below).
 
 A message can need more than one of these.
 
+## Running the RELAY engine
+
+Skills give shell commands like `node <skill dir>/scripts/relay.mjs list`.
+- If your `exec` tool takes a `command`, pass the command as-is.
+- If your `exec` tool takes `{ title, code }` (OpenClaw Code Mode), run the shell command
+  from inside the cell and return its result in one step:
+  `return await exec({ command: "node <skill dir>/scripts/relay.mjs list" });`
+  Do not search the catalog for other ways to run it.
+Pass message text only inside `--text "…"` / `--json '…'` arguments, never as shell code.
+
 ## Source of truth
 
 - The RELAY ledger (via the `commitment-tracker` engine) is the only source of truth for

@@ -3,7 +3,12 @@
 services:
   agent:
     build: .
+    # Stable hostname lets OpenClaw reclaim its gateway lease from a stopped container right
+    # away (it checks host+pid); otherwise a rebuild waits up to 5 min for the lease to expire.
+    hostname: relay-agent
     env_file: ./plow-credentials
+    environment:
+      RELAY_TZ: ${RELAY_TZ:-UTC}   # team timezone for "today/tonight", e.g. RELAY_TZ=Asia/Kolkata
     volumes:
       - state:/var/lib/plow   # RELAY ledger lives here (RELAY_DATA), kept across restarts
     stop_grace_period: 35s

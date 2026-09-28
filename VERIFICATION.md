@@ -46,6 +46,32 @@ Next:
 - Investigate export failure reported by Priya (I-1)
 ```
 
+## Plow base image (local deploy on a real Plow line)
+
+`plow-agents login` (text activation), then `plow-agents deploy --local --line ln_p1`
+from this repo (root `Dockerfile` on plow-openclaw-agent `e0217de`, `compose.yml`).
+Boot log: `identity resolved to ln_p1` · `agent model: plow/z-ai/glm-5.2` · `[gateway] ready` ·
+`[plow] connected account=chat`. Inside the container `openclaw skills list` shows the four
+RELAY skills **✓ ready** next to Plow's `owners-mac` and `google-workspace`, and the ledger is
+at `RELAY_DATA=/var/lib/plow/relay-data` on the persistent volume.
+
+The same scenario, sent with `openclaw agent` inside the container (Plow's model):
+
+| Session | Message | RELAY reply (verbatim, trimmed) |
+| --- | --- | --- |
+| conv-a | [From Aaditya]: I will send Anu the investor update tonight. | Noted — Aaditya is sending Anu the investor update tonight (tracked as C-1). |
+| conv-b | [From Priya]: Acme says export is broken again. | Recorded as **I-1** — Acme export issue, high priority, currently unassigned. Who's taking this? |
+| conv-c | [From Meera]: Can someone check what we are still on the hook for? | **2 items** 1. **C-1** — Aaditya → Anu: send investor update. Due **today**… 2. **I-1** — Acme: export is broken again. No owner… |
+| conv-a | [From Aaditya]: I sent Anu the update. | C-1 closed — investor update to Anu is done. ✓ (ledger: resolved, by Aaditya) |
+| conv-c2 | [From Meera]: What is still open? | 1 thing still open: **I-1** … Source: "Acme says export is broken again." — Priya… |
+| conv-c2 | [From Meera]: Draft a follow-up to Acme. | Draft ready — **A-1** (send_message → Acme, for I-1) … Reply **approve A-1** to send |
+| conv-a2 | [From Aaditya]: approve A-1 | A-1 was approved but I couldn't send it — no reachable Acme conversation was found … cancelled … Nothing was sent. |
+
+Found on Plow and fixed: the container runs in UTC (`compose.yml` now passes `RELAY_TZ`); a
+rebuilt container got a new hostname and had to wait 5 minutes for the gateway lease
+(`compose.yml` now pins `hostname:`); the agent suggested a follow-up would resolve the issue
+(relay-followup now forbids that).
+
 ## Bugs found live and fixed
 
 | Found | Fix |
@@ -63,8 +89,8 @@ Next:
   Real sender identity (`OPENCLAW_CHANNEL_CONTEXT`) and channel delivery are therefore not yet
   observed end to end.
 - **Real outbound send after approval.** It needs a channel that reaches the target.
-- **Plow image.** The Docker daemon was not running on the test machine, and `plow-agents login`
-  needs a text from the owner's phone.
+- **Texting the Plow line from a phone.** The agent is connected to the line, but the tests
+  above used `openclaw agent` inside the container, not real SMS/iMessage.
 - **Heartbeat nudges.** The scratch is loaded, but delivery skips until an owner route is set.
 - **Quality with bigger models.** `gemini-3.7-flash` and `gemini-3-flash-preview` hit the
   free-tier daily quota during testing, so the final run used `gemini-3.5-flash-lite`.
