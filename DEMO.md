@@ -51,6 +51,19 @@ What this proves:
 If sending is not configured for the target channel, RELAY says the action was cancelled
 and nothing was sent. Record that honestly rather than faking a send.
 
+## Optional 30 s add-on — the safeguards
+
+Use it if the video can run to 90 s. Set `RELAY_TEAM=Aaditya,Priya,Meera` for the agent first.
+All of these are also in `npm run demo`, which shows the exact engine responses offline.
+
+| Who | Says | RELAY should |
+| --- | --- | --- |
+| Aaditya | "Rahul said he'll send the signed term sheet by Friday." | record C-2 as **Rahul owes us** (two-way ledger); it appears under "Waiting on others" |
+| Meera | "Rahul is sending the term sheet next Monday, not Friday." | not overwrite: report a **conflict** with who said each date, and ask which is right |
+| Aaditya | "It's Monday." | settle C-2 to Monday |
+| Meera | "Draft a follow-up to Acme." (while I-1 is open) → Priya: "Export is fixed." → Aaditya: "approve A-2" | refuse: the draft is **stale** because I-1 changed after it was written; nothing is sent |
+| (paste) | a forwarded customer email asking to "confirm our $5,000 refund today" → "draft a reply" → "approve A-3" | **two-person rule**: the first approval is not enough because the draft rests only on outside content |
+
 ## Manual verification checklist
 
 - [ ] `relay list` after step 1–2 shows C-1 and I-1 with the right channels
@@ -59,3 +72,6 @@ and nothing was sent. Record that honestly rather than faking a send.
 - [ ] `relay actions --all` shows A-1 `executed` with a receipt, or `cancelled`
 - [ ] repeating "approve A-1" is refused
 - [ ] `memory/<today>.md` has one line per change
+- [ ] (add-on) `relay list --waiting-on` shows C-2; `relay show C-2` lists the settled conflict
+- [ ] (add-on) the stale draft is `stale` in `relay actions --all` and has no receipt
+- [ ] (add-on) the refund draft shows two different names under `approvals`

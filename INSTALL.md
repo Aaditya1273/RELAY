@@ -47,6 +47,8 @@ in a new session.
 The engine uses `$RELAY_DATA`, else `./relay-data` relative to the command's working
 directory (exec runs in the workspace by default). To pin it, set `RELAY_DATA` in the
 gateway's environment to an absolute path, e.g. `~/.openclaw/workspace/relay-data`.
+Recommended: `RELAY_TEAM` (comma list of teammates, e.g. `Aaditya,Priya,Meera`; anyone else's
+messages count as external content, see SECURITY.md).
 Optional: `RELAY_TZ` (IANA timezone for "today/tonight"), `RELAY_MEMORY_DIR`,
 `RELAY_APPROVERS` (comma list of names allowed to approve sends).
 
@@ -90,7 +92,17 @@ To let several people use one agent:
 - add each person to the channel allowlists / pairing for the channels they use;
 - for the Control UI, give each person a Gateway profile (multi-user mode shows owners,
   participants and presence — <https://docs.openclaw.ai/concepts/multi-user>);
+- set `RELAY_TEAM` so RELAY can tell teammates from customers and partners. It drives the
+  two-way ledger ("Rahul owes us" vs "Priya will fix it") and the trust gate;
 - optionally set `RELAY_APPROVERS` so only named people can approve outbound actions.
+
+What teammates will see in a shared deployment:
+- **Conflicts.** When two people give different deadlines or owners, RELAY asks instead of
+  choosing. Answer, and it runs `settle`.
+- **Tentative items.** Hedged talk ("maybe I'll…") waits for `confirm C-n` or `reject C-n`.
+- **Stale drafts.** A follow-up drafted before the item changed is refused at approval time;
+  ask for a new draft.
+- **Two approvals.** Drafts based only on outside content need a second teammate's "approve A-n".
 
 **Shared:** the ledger (items, evidence, people, drafts) and the `memory/` audit log.
 **Per person / per session:** chat transcripts, the private main session's MEMORY.md,

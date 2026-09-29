@@ -109,7 +109,7 @@ Then schedule the brief and connect channels: **[QUICKSTART.md](QUICKSTART.md)**
 | Morning brief as an OpenClaw automation | **Working** — run on the live gateway; channel delivery needs your channel + target |
 | Sending approved follow-ups | **Config required** — live run correctly cancelled with no channel; a real send needs a configured channel |
 | Discord / Telegram / other channels | **Config required** — see CHANNELS.md |
-| Plow image | **Working locally** — built on the Plow OpenClaw base, deployed with `plow-agents deploy --local`, scenario passed on Plow's model; publishing needs a public registry push |
+| Plow image | **Published** — public image on GHCR, running on Plow cloud (line ln_p2); scenario passed on Plow's model. The published image predates the safeguards above; a v2 image is needed to ship them |
 | Latch (Mac) actions, task/calendar creation | **Not implemented** beyond the approval gate; used only if a tool is present |
 | Gmail ingestion | **Not implemented** |
 

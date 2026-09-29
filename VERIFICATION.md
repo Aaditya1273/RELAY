@@ -82,6 +82,18 @@ rebuilt container got a new hostname and had to wait 5 minutes for the gateway l
 | A resolution was attributed to "unknown" | The `resolve` example now passes `--by "<sender>"` |
 | "approve A-1" was looked up as an item | AGENTS.md routes `A-` ids to relay-followup; `relay show A-1` now returns the action |
 
+## Safeguards added 2026-09-29 (commit `2484e19`)
+
+Two-way ledger, stale-draft guard, conflict detection, tentative queue and the trust gate
+with a two-person rule.
+
+| Check | Result |
+| --- | --- |
+| `npm test` | 34/34 pass (17 → 34; `test/features.test.mjs` covers the new behaviour) |
+| `npm run demo` | runs every new path: inbound C-2 "they owe us" → conflict → `settled`; draft → item resolved → approve returns `stale`; hedged capture → `needs_confirmation` → `confirmed`; external-only refund draft → `needs_second_approval` → `approved` by a second name |
+| Live gateway / Plow | **not yet re-run.** The published image (`sha256:a221370e…`) and the Plow cloud agent on ln_p2 predate this commit |
+| Research cited in README/ARCHITECTURE | all six arXiv IDs resolve to the named papers (checked against the arXiv API) |
+
 ## Not verified live (and why)
 
 - **Chat channels.** The Telegram token was rejected by Telegram (`getMe` → Unauthorized). The
