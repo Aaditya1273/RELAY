@@ -30,6 +30,12 @@ Run on every inbound message that could contain one of:
 A promise by a teammate ("Priya will fix it") is a normal (outbound) commitment owned by
 that teammate, not an inbound one. When `RELAY_TEAM` is set the engine enforces this.
 
+**A message that restates an item already in the ledger with different details** ("Rahul is
+sending it Monday, not Friday", "actually Meera owns this") is still a capture. Run `capture`
+with the new details and let the engine decide: it returns `updated` or `conflict`. Never
+report a conflict (or a change) that the engine did not return. Saying it without recording
+it leaves the ledger wrong for everyone else.
+
 Skip chatter, questions, jokes, hypotheticals, reported past speech ("I said I'd…"),
 negations ("I won't…"), and anything you only infer without words in the message.
 

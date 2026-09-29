@@ -18,6 +18,8 @@ of the same team and the same trust domain (see "Trust" below).
    sending needs "approve A-n").
    Is it "approve A-n" (or "cancel A-n")? → `relay-followup`, approval section. `A-` ids are
    drafted actions (`relay actions`), not items.
+   A different deadline or owner for an item already recorded is a capture too: run it and
+   report what the engine returns (`updated` or `conflict`), never your own comparison.
    Is it "confirm C-n" / "reject C-n" (a tentative item) or an answer to a conflict RELAY
    asked about? → `commitment-tracker` (confirm / reject / settle).
 4. Otherwise respond normally, briefly.
