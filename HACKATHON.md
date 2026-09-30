@@ -63,9 +63,9 @@ Not claimed: users, installs, token usage, success rates, testimonials, certific
 | --- | --- |
 | Agent Index | <https://aiworthusing.com/agent-index/relay> (agent id `relay`) |
 | Repository | <https://github.com/Aaditya1273/RELAY> (MIT) |
-| Image | `ghcr.io/aaditya1273/relay@sha256:a221370e977ba49da2cb00dced21995007c124dae8630e73ef3c356c0eb3d524` (public) |
-| Plow cloud | deployed with `plow-agents deploy <image@digest> --line ln_p2` |
-| Version note | that image is commit `4226004`. The research-backed safeguards (commit `2484e19`) are in the repo and tests, not yet in the published image: rebuild, `plow-agents image push ghcr.io/aaditya1273/relay:v2`, redeploy |
+| Image | `ghcr.io/aaditya1273/relay@sha256:637c7121b8ccda01d3eb58425cb7df0c845add87158232a928ee7bc6035455d7` (public, `v2`) |
+| Plow cloud | `v2` deployed with `plow-agents deploy <image@digest> --line ln_p2` — running |
+| Source commit | `3540bfa` — Plow OpenClaw base `771198a` (PR #1 from the Plow team) plus the research-backed safeguards and the conflict-capture fix |
 
 ## Agent Index publishing checklist
 
