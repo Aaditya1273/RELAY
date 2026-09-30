@@ -3,7 +3,7 @@
 # pin by digest too: BASE_REF=public.ecr.aws/e1h7x4a2/plow-cloud-agents:base-<sha>@sha256:<digest>
 # (see https://gallery.ecr.aws/e1h7x4a2/plow-cloud-agents).
 # Build:  plow-agents image build ghcr.io/<you>/relay:v1     (or: docker compose build)
-ARG BASE_REF=public.ecr.aws/e1h7x4a2/plow-cloud-agents:base-e0217de7c4fc5d8b7655aa4a1aaac8ed9f79cdf7
+ARG BASE_REF=public.ecr.aws/e1h7x4a2/plow-cloud-agents:base-771198a9609dcef54d44843e7da5329c17fa51b4@sha256:f1e7c421b97a80f1bd17015f96daceb965f350a241f7edc7e4d856a0e3a6f8f5
 FROM ${BASE_REF}
 
 # Agent Index listing id (see HACKATHON.md). Without it nothing is reported.
